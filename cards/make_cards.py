@@ -38,18 +38,59 @@ CARD_H = Mm(88)
 COLS, ROWS = 2, 3
 PER_PAGE = COLS * ROWS
 
-# Palette
-CARD_BG = "16060C"      # deep wine-black card body
-PAGE_BG = None          # leave page white (cheaper to print; cards are dark)
-GOLD = "C9A24B"         # warm antique gold — shared luxe accent
-GOLD_SOFT = "8A6F32"    # dimmer gold for fine keylines
-IVORY = "F4EAE6"        # warm off-white body text
 ORNAMENT = "\u2766"     # ❦ floral heart / fleuron
 
 # Fonts (installed: Cinzel, EB Garamond, Cormorant Garamond)
 DISPLAY = "Cinzel"          # engraved caps: label, number, title
 BODY = "EB Garamond"        # elegant book serif: prompt text
-BODY_ITALIC = "EB Garamond"
+
+# --------------------------------------------------------------------------
+# Themes. Each theme supplies the four palette roles used across the deck:
+#   card   -> full-bleed card fill
+#   frame  -> the double-rule outer frame (also the cut line)
+#   line   -> fine hairline keylines / footer / muted ornament
+#   text   -> body-copy colour
+#   accent_key -> which entry of each TIER tuple to use for label/number.
+#                 "dark" uses the bright jewel accent (index 1); "light"
+#                 uses the deeper, muted accent (index 2) so it reads on cream.
+# The layout, fonts and geometry are identical between themes.
+# --------------------------------------------------------------------------
+THEMES = {
+    "dark": {
+        "card": "16060C",     # deep wine-black
+        "frame": "C9A24B",    # antique gold
+        "line": "8A6F32",     # dim gold hairlines
+        "footer": "A98A44",   # slightly brighter gold so the PASS line reads
+        "text": "F4EAE6",     # warm ivory
+        "accent_key": "bright",
+    },
+    "light": {
+        "card": "FBF4EC",     # warm cream
+        "frame": "A8763B",    # deep rose-gold / bronze (prints cleanly)
+        "line": "C7A98A",     # soft taupe-gold hairline
+        "footer": "9A6B39",   # deeper bronze so the PASS line reads on cream
+        "text": "3A2A28",     # dark ink-brown
+        "accent_key": "deep",
+    },
+}
+
+# Active palette — populated by set_theme() before any rendering.
+CARD_BG = GOLD = GOLD_SOFT = FOOTER_INK = IVORY = None
+ACCENT_KEY = "bright"
+
+
+def set_theme(name):
+    global CARD_BG, GOLD, GOLD_SOFT, FOOTER_INK, IVORY, ACCENT_KEY
+    t = THEMES[name]
+    CARD_BG, GOLD, GOLD_SOFT, IVORY = t["card"], t["frame"], t["line"], t["text"]
+    FOOTER_INK = t["footer"]
+    ACCENT_KEY = t["accent_key"]
+
+
+def accent_of(bright_hex, deep_hex):
+    """Pick the tier accent appropriate to the active theme."""
+    return bright_hex if ACCENT_KEY == "bright" else deep_hex
+
 
 OUT = "/projects/sandbox/Romance_Night_60_Cards.docx"
 INCLUDE_COVER = True
@@ -174,7 +215,8 @@ def fit_size(text):
     return 11
 
 
-def render_card(cell, number, label, accent_hex, _soft_hex, text):
+def render_card(cell, number, label, bright_hex, deep_hex, text):
+    accent_hex = accent_of(bright_hex, deep_hex)
     cell._tc.remove(cell.paragraphs[0]._p)
     # gold outer frame = the cut line
     set_cell_borders(cell, GOLD, val="double", sz=18)
@@ -211,7 +253,7 @@ def render_card(cell, number, label, accent_hex, _soft_hex, text):
 
     # delicate italic pass line
     foot = para(cell, before=0, after=0)
-    run(foot, FOOTER_LINE, font=BODY, size=7.5, color=GOLD_SOFT,
+    run(foot, FOOTER_LINE, font=BODY, size=7.5, color=FOOTER_INK,
         italic=True, track=15)
 
 
@@ -278,7 +320,8 @@ def build_back_page(document, page_cards):
     for idx, card in enumerate(page_cards):
         r, c = idx // COLS, idx % COLS
         mirror_c = (COLS - 1) - c
-        accent = card[2]
+        # card = (number, label, bright_hex, deep_hex, text)
+        accent = accent_of(card[2], card[3])
         render_back(table.cell(r, mirror_c), accent)
     return table
 
@@ -314,21 +357,180 @@ def build_cover(document):
     run(p, COVER_SUBTITLE, font=BODY, size=13, color=IVORY, italic=True, track=20)
 
     # tier legend
-    for label, accent, _soft, _cards in TIERS:
+    for label, bright, deep, _cards in TIERS:
         pl = para(cell, before=18, after=1)
-        run(pl, label, font=DISPLAY, size=13, color=accent, bold=True,
-            caps=True, track=60)
+        run(pl, label, font=DISPLAY, size=13, color=accent_of(bright, deep),
+            bold=True, caps=True, track=60)
         pr_ = para(cell, before=0, after=0)
         run(pr_, COVER_RULES[label], font=BODY, size=11, color=IVORY, italic=True)
 
     p = para(cell, before=24, after=0)
-    run(p, FOOTER_LINE, font=BODY, size=10, color=GOLD_SOFT, italic=True, track=20)
+    run(p, FOOTER_LINE, font=BODY, size=10, color=FOOTER_INK, italic=True, track=20)
 
     p = para(cell, before=14, after=0)
     run(p, ORNAMENT, font=DISPLAY, size=16, color=GOLD)
 
 
+# --------------------------------------------------------------------------
+# font embedding
+# --------------------------------------------------------------------------
+# Map each logical font to its installed .ttf and the weight/style slots Word
+# uses. We embed Regular + Bold for both families (italics are synthesised by
+# Word from the regular; EB Garamond italic could be added if desired).
+FONT_FILES = {
+    "Cinzel": {
+        "regular": "/usr/share/fonts/custom/Cinzel[wght].ttf",
+        "bold": "/usr/share/fonts/custom/Cinzel[wght].ttf",
+    },
+    "EB Garamond": {
+        "regular": "/usr/share/fonts/custom/EBGaramond[wght].ttf",
+        "bold": "/usr/share/fonts/custom/EBGaramond[wght].ttf",
+        "italic": "/usr/share/fonts/custom/EBGaramond-Italic[wght].ttf",
+    },
+}
+
+
+def embed_fonts(docx_path):
+    """Embed the Cinzel / EB Garamond .ttf files into the .docx so Word shows
+    the intended typography on any machine, and flip on 'embed fonts' in
+    settings. Fonts are obfuscated per ECMA-376 (XOR first 32 bytes with a
+    per-font GUID). Silently skips any font file that is not present."""
+    import shutil
+    import uuid
+    import zipfile
+
+    # collect available (family, style, path)
+    available = []
+    for family, styles in FONT_FILES.items():
+        for style, path in styles.items():
+            if os.path.exists(path):
+                available.append((family, style, path))
+    if not available:
+        return  # nothing to embed; leave the doc as-is
+
+    tmp = docx_path + ".tmp"
+    with zipfile.ZipFile(docx_path, "r") as zin:
+        names = set(zin.namelist())
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            font_rel_ids = {}
+            fonts_added = []  # (family, style, part_name, guid, rel_id)
+            rid = 1000
+            for family, style, path in available:
+                with open(path, "rb") as fh:
+                    raw = bytearray(fh.read())
+                guid = uuid.uuid4()
+                gbytes = guid.bytes_le  # 16 bytes
+                # XOR first 32 bytes with the guid bytes (reversed), twice
+                key = bytes(reversed(gbytes))
+                for i in range(min(32, len(raw))):
+                    raw[i] ^= key[i % 16]
+                idx = len(fonts_added) + 1
+                part = f"word/fonts/font{idx}.odttf"
+                zout.writestr(part, bytes(raw))
+                rel_id = f"rIdFont{rid}"
+                rid += 1
+                fonts_added.append((family, style, f"font{idx}.odttf",
+                                    str(guid).upper(), rel_id))
+
+            # group by family
+            fams = {}
+            for family, style, part, guid, rel_id in fonts_added:
+                fams.setdefault(family, {})[style] = (part, guid, rel_id)
+
+            # copy every original part except the ones we regenerate
+            regen = {"word/fontTable.xml", "word/settings.xml",
+                     "word/_rels/fontTable.xml.rels",
+                     "[Content_Types].xml"}
+            for item in zin.infolist():
+                if item.filename in regen:
+                    continue
+                zout.writestr(item, zin.read(item.filename))
+
+            # ---- [Content_Types].xml : add odttf default ----
+            ct = zin.read("[Content_Types].xml").decode("utf-8")
+            if "obfuscatedFont" not in ct:
+                ins = ('<Default Extension="odttf" '
+                       'ContentType="application/vnd.openxmlformats-officedocument.'
+                       'obfuscatedFont"/>')
+                ct = ct.replace("</Types>", ins + "</Types>")
+            zout.writestr("[Content_Types].xml", ct)
+
+            # ---- word/fontTable.xml ----
+            W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            slot = {"regular": "w:embedRegular", "bold": "w:embedBold",
+                    "italic": "w:embedItalic", "bolditalic": "w:embedBoldItalic"}
+            fonts_xml = [f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+                         f'<w:fonts xmlns:w="{W}" xmlns:r="{R}">']
+            for family, styles in fams.items():
+                fonts_xml.append(f'<w:font w:name="{family}">')
+                fonts_xml.append('<w:charset w:val="00"/>'
+                                 '<w:family w:val="roman"/>'
+                                 '<w:pitch w:val="variable"/>')
+                for style, (part, guid, rel_id) in styles.items():
+                    tag = slot.get(style, "w:embedRegular")
+                    fonts_xml.append(
+                        f'<{tag} r:id="{rel_id}" '
+                        f'w:fontKey="{{{guid}}}" w:subsetted="false"/>')
+                fonts_xml.append('</w:font>')
+            fonts_xml.append('</w:fonts>')
+            zout.writestr("word/fontTable.xml", "".join(fonts_xml))
+
+            # ---- word/_rels/fontTable.xml.rels ----
+            rels = [f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/'
+                    'package/2006/relationships">']
+            REL_FONT = ("http://schemas.openxmlformats.org/officeDocument/2006/"
+                        "relationships/font")
+            for _family, styles in fams.items():
+                for _style, (part, _guid, rel_id) in styles.items():
+                    rels.append(f'<Relationship Id="{rel_id}" Type="{REL_FONT}" '
+                                f'Target="fonts/{part}"/>')
+            rels.append('</Relationships>')
+            zout.writestr("word/_rels/fontTable.xml.rels", "".join(rels))
+
+            # ---- word/settings.xml : turn on embedTrueTypeFonts ----
+            W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            if "word/settings.xml" in names:
+                settings = zin.read("word/settings.xml").decode("utf-8")
+            else:
+                settings = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                            f'<w:settings xmlns:w="{W}"></w:settings>')
+            if "embedTrueTypeFonts" not in settings:
+                inject = '<w:embedTrueTypeFonts/><w:saveSubsetFonts w:val="false"/>'
+                # Insert right AFTER the <w:settings ...> open tag — not after
+                # the XML declaration. Find the end of the settings root start
+                # tag by locating "<w:settings" and its matching ">".
+                start = settings.find("<w:settings")
+                close = settings.find(">", start) + 1
+                settings = settings[:close] + inject + settings[close:]
+            zout.writestr("word/settings.xml", settings)
+
+    shutil.move(tmp, docx_path)
+
+
 def main():
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Generate the Romance Night deck.")
+    ap.add_argument("--theme", choices=sorted(THEMES), default="dark",
+                    help="dark = wine-black + gold (default); "
+                         "light = cream + rose-gold, easier to print.")
+    ap.add_argument("--out", default=None, help="output .docx path")
+    ap.add_argument("--no-cover", action="store_true", help="omit the cover page")
+    ap.add_argument("--no-backs", action="store_true",
+                    help="omit card backs (single-sided fronts only)")
+    args = ap.parse_args()
+
+    global INCLUDE_COVER, INCLUDE_BACKS
+    if args.no_cover:
+        INCLUDE_COVER = False
+    if args.no_backs:
+        INCLUDE_BACKS = False
+
+    set_theme(args.theme)
+    out_path = args.out or OUT
+
     doc = Document()
 
     section = doc.sections[0]
@@ -367,11 +569,13 @@ def main():
         if i < len(blocks) - 1:
             add_sheet_spacer(doc)
 
-    doc.save(OUT)
+    doc.save(out_path)
+    embed_fonts(out_path)
+
     n_front = len(pages)
     n_back = len(pages) if INCLUDE_BACKS else 0
     n_cover = 1 if INCLUDE_COVER else 0
-    print(f"wrote {OUT} ({os.path.getsize(OUT)} bytes)")
+    print(f"wrote {out_path} ({os.path.getsize(out_path)} bytes)  theme={args.theme}")
     print(f"cards={len(cards)} front_pages={n_front} back_pages={n_back} "
           f"cover={n_cover} total_sheets={n_front + n_back + n_cover}")
 

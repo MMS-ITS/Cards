@@ -10,10 +10,17 @@ from docx.oxml.ns import qn
 
 from cards_content import FOOTER_LINE, TIERS, all_cards
 
-DOC = "/projects/sandbox/Romance_Night_60_Cards.docx"
+import sys
+
+DOC = sys.argv[1] if len(sys.argv) > 1 else "/projects/sandbox/Romance_Night_60_Cards.docx"
 TOL = 0.05
-CARD_BG = "16060C"
-GOLD = "C9A24B"
+
+# Accept either theme: infer the card fill + frame colour from the first card
+# cell, then assert the whole deck is internally consistent with it.
+KNOWN_THEMES = {
+    "16060C": {"frame": "C9A24B", "name": "dark"},
+    "FBF4EC": {"frame": "A8763B", "name": "light"},
+}
 
 doc = Document(DOC)
 problems = []
@@ -50,6 +57,16 @@ grids = [t for t in tables[1:] if len(t.rows) == 3 and len(t.columns) == 2]
 check(len(grids) == 20, f"expected 20 card grids (front+back), got {len(grids)}")
 front_grids = grids[0::2]  # front, back, front, back, ...
 check(len(front_grids) == 10, f"expected 10 front grids, got {len(front_grids)}")
+
+# ---- detect theme from the first card cell -----------------------------
+first_cell = front_grids[0].cell(0, 0)
+first_shd = first_cell._tc.tcPr.find(qn("w:shd"))
+detected_fill = first_shd.get(qn("w:fill")) if first_shd is not None else None
+theme = KNOWN_THEMES.get(detected_fill)
+check(theme is not None, f"card fill {detected_fill!r} matches no known theme")
+CARD_BG = detected_fill
+GOLD = theme["frame"] if theme else None
+THEME_NAME = theme["name"] if theme else "?"
 
 expected = all_cards()
 seen = []
@@ -106,12 +123,23 @@ usable_h = s.page_height.mm - s.top_margin.mm - s.bottom_margin.mm
 check(63 * 2 <= usable_w, f"grid too wide: 126mm > {usable_w:.1f}mm")
 check(88 * 3 <= usable_h, f"grid too tall: 264mm > {usable_h:.1f}mm")
 
+# ---- font embedding ----------------------------------------------------
+import zipfile
+with zipfile.ZipFile(DOC) as z:
+    names = z.namelist()
+    embedded = [n for n in names if n.startswith("word/fonts/") and n.endswith(".odttf")]
+    settings_ok = ("word/settings.xml" in names and
+                   b"embedTrueTypeFonts" in z.read("word/settings.xml"))
+check(len(embedded) >= 2, f"expected embedded font parts, found {len(embedded)}")
+check(settings_ok, "settings.xml missing embedTrueTypeFonts flag")
+
 longest = max(expected, key=lambda c: len(c[4]))
 print(f"tables       : {len(tables)}  (1 cover + 10 front + 10 back = 21)")
+print(f"fonts        : {len(embedded)} embedded parts, embed flag {'on' if settings_ok else 'OFF'}")
 print(f"front cards  : {front_cells}  (60 expected)")
 print(f"tiers        : " + ", ".join(f"{k}={v}" for k, v in counts.items()))
 print(f"card size    : 63 x 88 mm -> grid 126 x 264 mm inside {usable_w:.0f} x {usable_h:.0f} mm usable")
-print(f"style        : dark #{CARD_BG}, gold #{GOLD} double frame, Cinzel + EB Garamond")
+print(f"theme        : {THEME_NAME}  (card #{CARD_BG}, frame #{GOLD} double rule, Cinzel + EB Garamond)")
 print(f"footer line  : {FOOTER_LINE!r} on all 60 cards")
 print(f"longest card : #{longest[0]}, {len(longest[4])} chars")
 

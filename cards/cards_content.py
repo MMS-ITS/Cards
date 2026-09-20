@@ -88,6 +88,30 @@ TIERS = [
     ("Very Daring", "E24B62", "8A2E3C", RED),
 ]
 
+# Rich, saturated per-tier colour worlds for the vivid/colourful look. Each
+# tier gets its OWN card background, frame, accent (label + number), a bright
+# glow tint for motifs, and a body-text colour tuned for contrast on that bg.
+#   bg     -> deep saturated card fill (the tier's colour, darkened)
+#   frame  -> vivid tier-coloured cut frame
+#   accent -> bright hue for the big number + label
+#   glow   -> lightest tint, for hearts / flourishes / hairlines
+#   ink    -> body-copy colour (near-white, warmly tinted toward the tier)
+#   emoji  -> the sensual motif for this tier
+TIER_COLORS = {
+    "Flirty": {       # hot pink / rose
+        "bg": "4A0E2E", "frame": "FF4FA3", "accent": "FF8FC7",
+        "glow": "FFC6E2", "ink": "FDE7F1", "emoji": "\u2665",  # ♥
+    },
+    "Provocative": {  # magenta -> fuchsia / plum
+        "bg": "3E0A3A", "frame": "E0479E", "accent": "FF7AD1",
+        "glow": "FFB8E6", "ink": "FBE4F4", "emoji": "\u2764",  # ❤
+    },
+    "Very Daring": {  # scarlet / crimson
+        "bg": "4E0512", "frame": "FF3B4E", "accent": "FF7A7A",
+        "glow": "FFC2B0", "ink": "FFE6E2", "emoji": "\u2765",  # ❥
+    },
+}
+
 FOOTER_LINE = "PASS \u2014 no explanation required"
 
 # ---- cover / title page text -------------------------------------------

@@ -22,6 +22,14 @@ KNOWN_THEMES = {
     "FBF4EC": {"frame": "A8763B", "name": "light"},
 }
 
+# The vivid theme uses a per-tier colour world; detect it by the first card's
+# fill matching a TIER_COLORS bg, and validate each card against its tier.
+try:
+    from cards_content import TIER_COLORS
+except ImportError:
+    TIER_COLORS = {}
+VIVID_BGS = {c["bg"] for c in TIER_COLORS.values()}
+
 doc = Document(DOC)
 problems = []
 
@@ -62,20 +70,35 @@ check(len(front_grids) == 10, f"expected 10 front grids, got {len(front_grids)}"
 first_cell = front_grids[0].cell(0, 0)
 first_shd = first_cell._tc.tcPr.find(qn("w:shd"))
 detected_fill = first_shd.get(qn("w:fill")) if first_shd is not None else None
-theme = KNOWN_THEMES.get(detected_fill)
-check(theme is not None, f"card fill {detected_fill!r} matches no known theme")
-CARD_BG = detected_fill
-GOLD = theme["frame"] if theme else None
-THEME_NAME = theme["name"] if theme else "?"
+
+IS_VIVID = detected_fill in VIVID_BGS
+if IS_VIVID:
+    THEME_NAME = "vivid"
+    CARD_BG = GOLD = None  # per-tier; validated card-by-card below
+else:
+    theme = KNOWN_THEMES.get(detected_fill)
+    check(theme is not None, f"card fill {detected_fill!r} matches no known theme")
+    CARD_BG = detected_fill
+    GOLD = theme["frame"] if theme else None
+    THEME_NAME = theme["name"] if theme else "?"
 
 expected = all_cards()
 seen = []
 front_cells = 0
 
+# expected (bg, frame) per card index, for the vivid theme
+exp_colors = []
+for _num, label, _b, _s, _t in expected:
+    if IS_VIVID and label in TIER_COLORS:
+        exp_colors.append((TIER_COLORS[label]["bg"], TIER_COLORS[label]["frame"]))
+    else:
+        exp_colors.append((CARD_BG, GOLD))
+
 for gi, t in enumerate(front_grids, start=1):
     for row in t.rows:
         check(near(row.height, 88), f"front {gi}: row height {row.height.mm if row.height else None}")
         for cell in row.cells:
+            exp_bg, exp_frame = exp_colors[front_cells]
             front_cells += 1
             check(near(cell.width, 63), f"front {gi}: cell width {cell.width.mm if cell.width else None}")
             tcPr = cell._tc.tcPr
@@ -85,11 +108,11 @@ for gi, t in enumerate(front_grids, start=1):
                 for edge in ("top", "left", "bottom", "right"):
                     el = borders.find(qn(f"w:{edge}"))
                     check(el is not None and el.get(qn("w:val")) == "double"
-                          and el.get(qn("w:color")) == GOLD,
-                          f"front {gi}: {edge} border not a gold double rule")
+                          and el.get(qn("w:color")) == exp_frame,
+                          f"front {gi}: {edge} border not double {exp_frame}")
             shd = tcPr.find(qn("w:shd"))
-            check(shd is not None and shd.get(qn("w:fill")) == CARD_BG,
-                  f"front {gi}: card fill not {CARD_BG}")
+            check(shd is not None and shd.get(qn("w:fill")) == exp_bg,
+                  f"front {gi}: card fill not {exp_bg}")
             paras = [p.text for p in cell.paragraphs]
             # ornament, label, number, divider(blank), body, footer = 6
             check(len(paras) == 6, f"front {gi}: cell has {len(paras)} paragraphs (want 6)")
@@ -139,7 +162,10 @@ print(f"fonts        : {len(embedded)} embedded parts, embed flag {'on' if setti
 print(f"front cards  : {front_cells}  (60 expected)")
 print(f"tiers        : " + ", ".join(f"{k}={v}" for k, v in counts.items()))
 print(f"card size    : 63 x 88 mm -> grid 126 x 264 mm inside {usable_w:.0f} x {usable_h:.0f} mm usable")
-print(f"theme        : {THEME_NAME}  (card #{CARD_BG}, frame #{GOLD} double rule, Cinzel + EB Garamond)")
+if THEME_NAME == "vivid":
+    print(f"theme        : vivid  (per-tier colour worlds, gold sparkle, Cinzel + EB Garamond)")
+else:
+    print(f"theme        : {THEME_NAME}  (card #{CARD_BG}, frame #{GOLD} double rule, Cinzel + EB Garamond)")
 print(f"footer line  : {FOOTER_LINE!r} on all 60 cards")
 print(f"longest card : #{longest[0]}, {len(longest[4])} chars")
 

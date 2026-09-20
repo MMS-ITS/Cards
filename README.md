@@ -10,6 +10,8 @@ A print-ready deck of 60 couples' game cards, laid out for laminating and cuttin
 | `Romance_Night_60_Cards.pdf` | Print preview of the dark deck. |
 | `Romance_Night_60_Cards_Light.docx` | The **light** deck — same layout in a cream + rose-gold palette that is far cheaper to print. Fonts embedded. |
 | `Romance_Night_60_Cards_Light.pdf` | Print preview of the light deck. |
+| `Romance_Night_60_Cards_Vivid.docx` | The **vivid** deck — bold, saturated, sensual: each tier its own colour world (hot-pink, fuchsia, scarlet) with heart motifs. Fonts embedded. |
+| `Romance_Night_60_Cards_Vivid.pdf` | Print preview of the vivid deck. |
 | `cards/cards_content.py` | The 60 card texts, split into three tiers of 20. Edit here to change wording. |
 | `cards/make_cards.py` | Generates the `.docx` from the card texts. |
 | `cards/verify.py` | Reads the generated `.docx` back and asserts it matches the layout spec. |
@@ -32,6 +34,17 @@ layout, fonts and geometry — only the palette changes):
 |-------|------|-------|------|----------|
 | **dark** (default) | wine-black `#16060C` | antique gold `#C9A24B` | warm ivory | dramatic, screen or premium card stock |
 | **light** | warm cream `#FBF4EC` | rose-gold/bronze `#A8763B` | ink-brown | easy, low-ink home printing |
+| **vivid** | **per-tier** (see below) | vivid per-tier | near-white | maximum colour + sex appeal |
+
+The **vivid** theme gives each tier its own saturated colour world, with ♥
+heart motifs and a gold sparkle, so the deck feels sultry and the heat visibly
+escalates as you move through the tiers:
+
+| Tier | Card background | Frame + accent |
+|------|-----------------|----------------|
+| Flirty | deep berry-plum `#4A0E2E` | hot pink `#FF4FA3` / `#FF8FC7` |
+| Provocative | dark fuchsia `#3E0A3A` | magenta `#E0479E` / `#FF7AD1` |
+| Very Daring | oxblood scarlet `#4E0512` | red `#FF3B4E` / coral `#FF7A7A` |
 
 Shared design details:
 
@@ -62,8 +75,9 @@ fonts are not installed. This is why each `.docx` is ~1.3 MB.
 
 The document is `cover + (front, back) x 10 = 21 sheets`.
 
-Colours and cover text live in `cards/cards_content.py`; the themes, fonts,
-frame, ornament, cover, backs and font-embedding live in `cards/make_cards.py`.
+Colours and cover text live in `cards/cards_content.py` (the vivid per-tier
+palette is the `TIER_COLORS` table); the themes, fonts, frame, ornament, cover,
+backs and font-embedding live in `cards/make_cards.py`.
 
 ## Regenerating
 
@@ -75,7 +89,9 @@ cd cards
 ../.venv/bin/python make_cards.py --theme dark  --out ../Romance_Night_60_Cards.docx
 # light deck
 ../.venv/bin/python make_cards.py --theme light --out ../Romance_Night_60_Cards_Light.docx
-../.venv/bin/python verify.py    # asserts the last-built .docx matches the spec
+# vivid deck (bold colour + heart motifs)
+../.venv/bin/python make_cards.py --theme vivid --out ../Romance_Night_60_Cards_Vivid.docx
+../.venv/bin/python verify.py ../Romance_Night_60_Cards_Vivid.docx   # verify any built deck
 ```
 
 Useful flags: `--no-backs` (single-sided fronts only), `--no-cover`.

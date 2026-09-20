@@ -30,7 +30,8 @@ from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
 from cards_content import (
-    COVER_RULES, COVER_SUBTITLE, COVER_TITLE, FOOTER_LINE, TIERS, all_cards,
+    COVER_RULES, COVER_SUBTITLE, COVER_TITLE, FOOTER_LINE, TIER_COLORS, TIERS,
+    all_cards,
 )
 
 CARD_W = Mm(63)
@@ -72,24 +73,55 @@ THEMES = {
         "text": "3A2A28",     # dark ink-brown
         "accent_key": "deep",
     },
+    # Bold, saturated, sensual look: every tier gets its OWN colour world
+    # (hot-pink Flirty, fuchsia Provocative, scarlet Very Daring) via the
+    # per-tier TIER_COLORS table, with gold reserved as a secondary sparkle.
+    "vivid": {
+        "card": "2A0A1C",     # fallback fill (overridden per tier)
+        "frame": "FF4FA3",    # fallback frame (overridden per tier)
+        "line": "F4C64B",     # gold sparkle hairlines
+        "footer": "F4C64B",
+        "text": "FDE7F1",
+        "accent_key": "bright",
+        "per_tier": True,     # renderers pull colours from TIER_COLORS
+    },
 }
 
 # Active palette — populated by set_theme() before any rendering.
 CARD_BG = GOLD = GOLD_SOFT = FOOTER_INK = IVORY = None
 ACCENT_KEY = "bright"
+PER_TIER = False
 
 
 def set_theme(name):
-    global CARD_BG, GOLD, GOLD_SOFT, FOOTER_INK, IVORY, ACCENT_KEY
+    global CARD_BG, GOLD, GOLD_SOFT, FOOTER_INK, IVORY, ACCENT_KEY, PER_TIER
     t = THEMES[name]
     CARD_BG, GOLD, GOLD_SOFT, IVORY = t["card"], t["frame"], t["line"], t["text"]
     FOOTER_INK = t["footer"]
     ACCENT_KEY = t["accent_key"]
+    PER_TIER = t.get("per_tier", False)
 
 
 def accent_of(bright_hex, deep_hex):
     """Pick the tier accent appropriate to the active theme."""
     return bright_hex if ACCENT_KEY == "bright" else deep_hex
+
+
+def tier_palette(label):
+    """Per-card colour set. In the vivid theme each tier has its own colour
+    world; otherwise fall back to the single active theme palette."""
+    if PER_TIER and label in TIER_COLORS:
+        c = TIER_COLORS[label]
+        return {
+            "bg": c["bg"], "frame": c["frame"], "accent": c["accent"],
+            "glow": c["glow"], "ink": c["ink"], "footer": GOLD,
+            "emoji": c["emoji"],
+        }
+    return {
+        "bg": CARD_BG, "frame": GOLD, "accent": None,
+        "glow": GOLD_SOFT, "ink": IVORY, "footer": FOOTER_INK,
+        "emoji": ORNAMENT,
+    }
 
 
 OUT = "/projects/sandbox/Romance_Night_60_Cards.docx"
@@ -216,66 +248,81 @@ def fit_size(text):
 
 
 def render_card(cell, number, label, bright_hex, deep_hex, text):
-    accent_hex = accent_of(bright_hex, deep_hex)
+    pal = tier_palette(label)
+    # In non-vivid themes there's no per-tier accent, so fall back to the
+    # theme-appropriate jewel accent from the TIER tuple.
+    accent_hex = pal["accent"] or accent_of(bright_hex, deep_hex)
+    bg, frame, glow, ink = pal["bg"], pal["frame"], pal["glow"], pal["ink"]
+    emoji = pal["emoji"]
+
     cell._tc.remove(cell.paragraphs[0]._p)
-    # gold outer frame = the cut line
-    set_cell_borders(cell, GOLD, val="double", sz=18)
+    # vivid tier-coloured frame = the cut line
+    set_cell_borders(cell, frame, val="double", sz=18)
     # NOTE: keep cell margins at 0 and vAlign at "top". LibreOffice mis-sizes
     # EXACTLY-height rows when a cell is vertically centered with non-zero
     # margins, collapsing the grid — so we balance the card with explicit
     # paragraph spacing instead of vertical centering.
     set_cell_margins(cell, top=0, start=0, bottom=0, end=0)
-    shade_cell(cell, CARD_BG)
+    shade_cell(cell, bg)
     vertical_align(cell, "top")
 
-    # gold ornament (monogram) near the top
-    orn = para(cell, before=13, after=1)
-    run(orn, ORNAMENT, font=DISPLAY, size=12, color=GOLD)
+    # a trio of sensual motifs (♥ ❦ ♥) in the tier glow, up top
+    orn = para(cell, before=11, after=1)
+    run(orn, emoji + "  ", font=DISPLAY, size=11, color=glow)
+    run(orn, ORNAMENT, font=DISPLAY, size=13, color=GOLD)
+    run(orn, "  " + emoji, font=DISPLAY, size=11, color=glow)
 
-    # engraved tier label with gold hairlines above/below
-    band = para(cell, before=1, after=0)
-    paragraph_border(band, GOLD_SOFT, sz=4, space=5, sides=("top", "bottom"))
+    # engraved tier label with tier-coloured hairlines above/below
+    band = para(cell, before=2, after=0)
+    paragraph_border(band, frame, sz=5, space=5, sides=("top", "bottom"))
     run(band, label, font=DISPLAY, size=8.5, color=accent_hex, bold=True,
         caps=True, track=80)
 
-    # large engraved number
-    num = para(cell, before=20, after=2, line=1.0)
+    # large vivid number
+    num = para(cell, before=18, after=2, line=1.0)
     run(num, str(number), font=DISPLAY, size=34, color=accent_hex, bold=True)
 
-    # gold divider under the number
+    # glowing divider under the number
     div = para(cell, before=2, after=12)
-    paragraph_border(div, GOLD_SOFT, sz=4, space=2, sides=("bottom",))
+    paragraph_border(div, glow, sz=4, space=2, sides=("bottom",))
     div.add_run(" ").font.size = Pt(2)
 
-    # the prompt, ivory book serif
-    body = para(cell, before=0, after=12, line=1.24)
-    run(body, text, font=BODY, size=fit_size(text), color=IVORY)
+    # the prompt, warm-tinted book serif
+    body = para(cell, before=0, after=11, line=1.24)
+    run(body, text, font=BODY, size=fit_size(text), color=ink)
 
-    # delicate italic pass line
+    # delicate italic pass line, in the tier's footer ink (gold in vivid)
     foot = para(cell, before=0, after=0)
-    run(foot, FOOTER_LINE, font=BODY, size=7.5, color=FOOTER_INK,
+    run(foot, FOOTER_LINE, font=BODY, size=7.5, color=pal["footer"],
         italic=True, track=15)
 
 
 # --------------------------------------------------------------------------
 # card back rendering (a repeating patterned tile for double-sided printing)
 # --------------------------------------------------------------------------
-def render_back(cell, accent_hex):
+def render_back(cell, label, bright_hex, deep_hex):
+    pal = tier_palette(label)
+    accent_hex = pal["accent"] or accent_of(bright_hex, deep_hex)
+    bg, frame, glow = pal["bg"], pal["frame"], pal["glow"]
+    emoji = pal["emoji"]
+
     cell._tc.remove(cell.paragraphs[0]._p)
-    set_cell_borders(cell, GOLD, val="double", sz=18)
+    set_cell_borders(cell, frame, val="double", sz=18)
     set_cell_margins(cell, top=0, start=0, bottom=0, end=0)
-    shade_cell(cell, CARD_BG)
+    shade_cell(cell, bg)
     vertical_align(cell, "center")
 
     top = para(cell, before=0, after=0)
-    run(top, ORNAMENT, font=DISPLAY, size=16, color=GOLD_SOFT)
+    run(top, emoji + "  " + ORNAMENT + "  " + emoji, font=DISPLAY, size=13,
+        color=glow)
 
-    mid = para(cell, before=10, after=0)
-    paragraph_border(mid, GOLD_SOFT, sz=4, space=6, sides=("top", "bottom"))
-    run(mid, ORNAMENT, font=DISPLAY, size=30, color=accent_hex)
+    mid = para(cell, before=9, after=0)
+    paragraph_border(mid, frame, sz=6, space=6, sides=("top", "bottom"))
+    run(mid, emoji, font=DISPLAY, size=40, color=accent_hex)
 
-    bot = para(cell, before=10, after=0)
-    run(bot, ORNAMENT, font=DISPLAY, size=16, color=GOLD_SOFT)
+    bot = para(cell, before=9, after=0)
+    run(bot, emoji + "  " + ORNAMENT + "  " + emoji, font=DISPLAY, size=13,
+        color=glow)
 
 
 # --------------------------------------------------------------------------
@@ -321,8 +368,8 @@ def build_back_page(document, page_cards):
         r, c = idx // COLS, idx % COLS
         mirror_c = (COLS - 1) - c
         # card = (number, label, bright_hex, deep_hex, text)
-        accent = accent_of(card[2], card[3])
-        render_back(table.cell(r, mirror_c), accent)
+        _num, label, bright, deep, _text = card
+        render_back(table.cell(r, mirror_c), label, bright, deep)
     return table
 
 
@@ -356,11 +403,16 @@ def build_cover(document):
     paragraph_border(p, GOLD_SOFT, sz=4, space=8, sides=("top", "bottom"))
     run(p, COVER_SUBTITLE, font=BODY, size=13, color=IVORY, italic=True, track=20)
 
-    # tier legend
+    # tier legend — each tier shown in its own vivid accent + motif
     for label, bright, deep, _cards in TIERS:
-        pl = para(cell, before=18, after=1)
-        run(pl, label, font=DISPLAY, size=13, color=accent_of(bright, deep),
+        tp = tier_palette(label)
+        legend_accent = tp["accent"] or accent_of(bright, deep)
+        legend_emoji = tp["emoji"]
+        pl = para(cell, before=16, after=1)
+        run(pl, legend_emoji + "  ", font=DISPLAY, size=12, color=tp["glow"])
+        run(pl, label, font=DISPLAY, size=13, color=legend_accent,
             bold=True, caps=True, track=60)
+        run(pl, "  " + legend_emoji, font=DISPLAY, size=12, color=tp["glow"])
         pr_ = para(cell, before=0, after=0)
         run(pr_, COVER_RULES[label], font=BODY, size=11, color=IVORY, italic=True)
 

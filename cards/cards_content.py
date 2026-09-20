@@ -74,11 +74,17 @@ RED = [
     "Name the one thing you most want to end tonight doing \u2014 then decide together.",
 ]
 
-# (label, band colour, number colour, cards)
+# (label, accent_hex, soft_hex, cards)
+#   accent_hex -> tier label, big number, double-rule frame
+#   soft_hex   -> muted hairlines / keyline / footer, a dimmer tint of accent
+# Warm, sensual palette that glows against the dark card background:
+#   Flirty      -> blush rose
+#   Provocative -> amber / copper
+#   Very Daring -> deep crimson
 TIERS = [
-    ("GREEN \u00b7 FLIRTY", "2E7D32", "2E7D32", GREEN),
-    ("ORANGE \u00b7 PROVOCATIVE", "E06C00", "C25700", ORANGE),
-    ("RED \u00b7 VERY DARING", "B3261E", "B3261E", RED),
+    ("Flirty", "E7A6B4", "8A5563", GREEN),
+    ("Provocative", "E7A15C", "8A5F34", ORANGE),
+    ("Very Daring", "E0556A", "8A2E3C", RED),
 ]
 
 FOOTER_LINE = "PASS = no explanation required"

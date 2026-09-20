@@ -17,10 +17,25 @@ A print-ready deck of 60 couples' game cards, laid out for laminating and cuttin
 - A4 (210 x 297 mm)
 - 6 cards per page, 10 pages, 60 cards
 - Each card 63 x 88 mm
-- Three tiers: 20 Green (Flirty), 20 Orange (Provocative), 20 Red (Very Daring)
-- Heavy 3 pt cut borders on all four sides
+- Three tiers of 20: Flirty, Provocative, Very Daring
 - Centred text, large card numbers, and a small `PASS = no explanation required` line
 - Designed to laminate first, then cut along the borders
+
+## Visual style
+
+An intimate, boudoir-invitation look rather than a plain white card:
+
+- Deep near-black card fill (`#17070E`) with a warm plum undertone
+- Elegant **Georgia** serif for the label, numbers and card text
+- A **double-rule accent frame** on all four sides (this is also the cut line),
+  with thin hairline keylines bracketing the tier label and under the number
+- A warm per-tier accent that glows on the dark card:
+  Flirty = blush rose, Provocative = amber/copper, Very Daring = deep crimson
+- Engraved small-caps tier label with letter-spacing; ivory serif body text;
+  a delicate italic `PASS = no explanation required` footer
+
+Colours live in `cards/cards_content.py` (`TIERS`, as `(label, accent_hex,
+soft_hex, cards)`); the fonts, frame and dark fill live in `cards/make_cards.py`.
 
 ## Regenerating
 

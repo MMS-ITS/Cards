@@ -2,11 +2,21 @@
 """Build a print-ready A4 Word document of 60 couples cards.
 
 Layout: 2 columns x 3 rows = 6 cards per page, 10 pages, 60 cards.
-Each card is 63 x 88 mm with heavy black cut borders, a coloured
-category band, a large card number, centred card text and a small
-"PASS = no explanation required" footer line.
+Each card is 63 x 88 mm.
+
+Visual style ("sexy" treatment):
+  * deep near-black card fill with a warm undertone, for an intimate,
+    boudoir feel instead of a clinical white card;
+  * an elegant serif (Georgia) for the tier label and card text;
+  * a double-rule frame in a warm accent tone plus a thin inner keyline,
+    rather than a plain heavy black box;
+  * a rich per-tier accent (blush rose / amber copper / deep crimson) used
+    for the label, the large number and the frame, glowing on the dark card;
+  * a delicate italic "PASS = no explanation required" footer.
+
+The physical layout (A4, 63x88mm cards, 6/page, 10 pages, printable cut
+frame) is unchanged so it still laminates and cuts the same way.
 """
-import copy
 import os
 
 from docx import Document
@@ -23,30 +33,40 @@ CARD_H = Mm(88)
 COLS, ROWS = 2, 3
 PER_PAGE = COLS * ROWS
 
-CUT_BORDER_SZ = 24  # eighths of a point -> 3.0 pt heavy cutting border
+# Card body: deep near-black with a faint warm/plum undertone.
+CARD_BG = "17070E"
+# Fonts
+SERIF = "Georgia"          # elegant body + label
+SERIF_DISPLAY = "Georgia"  # large number (Georgia numerals are graceful)
+
 OUT = "/projects/sandbox/Romance_Night_60_Cards.docx"
 
 
 # --------------------------------------------------------------------------
 # low-level OOXML helpers
 # --------------------------------------------------------------------------
-def set_cell_borders(cell, sz=CUT_BORDER_SZ, color="000000"):
-    """Give a cell a heavy solid border on all four sides."""
+def set_cell_borders(cell, outer_hex, inner_hex):
+    """A refined double-rule cut frame.
+
+    Word cell borders support a genuine "double" line style, which reads as
+    an elegant framed invitation rather than a plain box. We also set an
+    inset keyline via the paragraph border on the frame paragraph elsewhere.
+    """
     tcPr = cell._tc.get_or_add_tcPr()
     for old in tcPr.findall(qn("w:tcBorders")):
         tcPr.remove(old)
     borders = OxmlElement("w:tcBorders")
     for edge in ("top", "left", "bottom", "right"):
         el = OxmlElement(f"w:{edge}")
-        el.set(qn("w:val"), "single")
-        el.set(qn("w:sz"), str(sz))
+        el.set(qn("w:val"), "double")      # double rule = classier frame
+        el.set(qn("w:sz"), "18")           # eighths pt -> ~2.25pt total
         el.set(qn("w:space"), "0")
-        el.set(qn("w:color"), color)
+        el.set(qn("w:color"), outer_hex)
         borders.append(el)
     tcPr.append(borders)
 
 
-def set_cell_margins(cell, top=2.6, start=3.4, bottom=2.6, end=3.4):
+def set_cell_margins(cell, top=0, start=0, bottom=0, end=0):
     """Set internal cell padding, in millimetres."""
     tcPr = cell._tc.get_or_add_tcPr()
     mar = OxmlElement("w:tcMar")
@@ -58,18 +78,40 @@ def set_cell_margins(cell, top=2.6, start=3.4, bottom=2.6, end=3.4):
     tcPr.append(mar)
 
 
-def shade_paragraph(paragraph, hex_fill):
-    """Fill a paragraph's background — used for the category band."""
-    pPr = paragraph._p.get_or_add_pPr()
+def shade(element_pr, hex_fill):
+    """Add a solid background fill to a paragraph or cell properties element."""
     shd = OxmlElement("w:shd")
     shd.set(qn("w:val"), "clear")
     shd.set(qn("w:color"), "auto")
     shd.set(qn("w:fill"), hex_fill)
-    pPr.append(shd)
+    element_pr.append(shd)
+
+
+def shade_cell(cell, hex_fill):
+    tcPr = cell._tc.get_or_add_tcPr()
+    shade(tcPr, hex_fill)
+
+
+def shade_paragraph(paragraph, hex_fill):
+    shade(paragraph._p.get_or_add_pPr(), hex_fill)
+
+
+def paragraph_border(paragraph, hex_color, sz=6, space=4, sides=("top", "bottom")):
+    """Thin decorative rule(s) around a paragraph — used as an inner keyline
+    and as the hairlines that bracket the tier label."""
+    pPr = paragraph._p.get_or_add_pPr()
+    pbdr = OxmlElement("w:pBdr")
+    for side in sides:
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:val"), "single")
+        el.set(qn("w:sz"), str(sz))
+        el.set(qn("w:space"), str(space))
+        el.set(qn("w:color"), hex_color)
+        pbdr.append(el)
+    pPr.append(pbdr)
 
 
 def no_split(row):
-    """Stop a row from breaking across pages."""
     trPr = row._tr.get_or_add_trPr()
     trPr.append(OxmlElement("w:cantSplit"))
 
@@ -88,15 +130,30 @@ def vertical_align(cell, val="top"):
     tcPr.append(va)
 
 
+def set_char_spacing(run, twentieths):
+    """Letter-spacing (tracking), in twentieths of a point. Adds an airy,
+    engraved feel to the small-caps tier label."""
+    rPr = run._r.get_or_add_rPr()
+    sp = OxmlElement("w:spacing")
+    sp.set(qn("w:val"), str(twentieths))
+    rPr.append(sp)
+
+
+def set_small_caps(run):
+    rPr = run._r.get_or_add_rPr()
+    sc = OxmlElement("w:smallCaps")
+    rPr.append(sc)
+
+
 # --------------------------------------------------------------------------
 # card rendering
 # --------------------------------------------------------------------------
-TEXT_INSET = Mm(3.6)  # side padding applied per-paragraph, so the colour
-                      # band can still run the full width of the card
+TEXT_INSET = Mm(4.4)  # generous side padding for a framed, luxurious feel
 
 
-def tight(paragraph, before=0, after=0, line=None, inset=True):
-    pf = paragraph.paragraph_format
+def para(cell, before=0, after=0, line=None, inset=True):
+    p = cell.add_paragraph()
+    pf = p.paragraph_format
     pf.space_before = Pt(before)
     pf.space_after = Pt(after)
     if line is not None:
@@ -104,72 +161,70 @@ def tight(paragraph, before=0, after=0, line=None, inset=True):
     if inset:
         pf.left_indent = TEXT_INSET
         pf.right_indent = TEXT_INSET
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    return paragraph
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    return p
 
 
 def fit_size(text):
-    """Shrink body text a little for the longest prompts."""
+    """Shrink body text a little for the longest prompts (serif runs a touch
+    wider than Calibri, so sizes are nudged down slightly vs. the old set)."""
     n = len(text)
     if n <= 70:
-        return 15
-    if n <= 95:
         return 14
-    if n <= 120:
+    if n <= 95:
         return 13
-    return 12
+    if n <= 120:
+        return 12
+    return 11
 
 
-def render_card(cell, number, label, band_hex, num_hex, text):
-    # wipe the default empty paragraph
+def render_card(cell, number, label, accent_hex, soft_hex, text):
+    """accent_hex = strong tier accent (label, number, frame);
+    soft_hex     = muted tint for the inner keyline / hairlines."""
     cell._tc.remove(cell.paragraphs[0]._p)
-    set_cell_borders(cell)
-    # zero cell padding so the colour band reaches the cut line; text
-    # paragraphs carry their own side inset instead
+    set_cell_borders(cell, outer_hex=accent_hex, inner_hex=soft_hex)
     set_cell_margins(cell, top=0, start=0, bottom=0, end=0)
+    shade_cell(cell, CARD_BG)
     vertical_align(cell, "top")
 
-    # 1. full-bleed coloured category band, flush to the top cut line.
-    #    Exact line spacing gives the stripe a predictable thickness.
-    band = cell.add_paragraph()
-    tight(band, before=0, after=0, inset=False)
-    band.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
-    band.paragraph_format.line_spacing = Pt(17)
-    shade_paragraph(band, band_hex)
+    # 1. tier label, engraved small-caps with hairline rules above/below
+    band = para(cell, before=13, after=0, inset=True)
+    paragraph_border(band, soft_hex, sz=4, space=5, sides=("top", "bottom"))
     r = band.add_run(label)
     r.bold = True
-    r.font.size = Pt(9.5)
-    r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-    r.font.name = "Calibri"
+    set_small_caps(r)
+    set_char_spacing(r, 60)  # 3pt tracking
+    r.font.size = Pt(9)
+    r.font.color.rgb = RGBColor.from_string(accent_hex)
+    r.font.name = SERIF
 
-    # 2. large card number. The generous space_before drops the text block
-    #    toward the optical centre of the card. Worst case is band 17pt +
-    #    42 + number ~36 + text 4 lines ~68 + footer ~18 = ~181pt, well
-    #    inside the 249pt (88mm) fixed row height, so nothing is clipped.
-    num = cell.add_paragraph()
-    tight(num, before=42, after=5, line=1.0)
+    # 2. large elegant number
+    num = para(cell, before=22, after=4, line=1.0)
     r = num.add_run(str(number))
-    r.bold = True
-    r.font.size = Pt(30)
-    r.font.color.rgb = RGBColor.from_string(num_hex)
-    r.font.name = "Calibri"
+    r.font.size = Pt(34)
+    r.font.color.rgb = RGBColor.from_string(accent_hex)
+    r.font.name = SERIF_DISPLAY
 
-    # 3. the prompt itself
-    body = cell.add_paragraph()
-    tight(body, before=0, after=8, line=1.18)
+    # thin accent divider under the number
+    div = para(cell, before=0, after=8, inset=True)
+    paragraph_border(div, soft_hex, sz=4, space=2, sides=("bottom",))
+    div.add_run(" ").font.size = Pt(2)
+
+    # 3. the prompt itself, in a warm off-white serif
+    body = para(cell, before=0, after=10, line=1.22)
     r = body.add_run(text)
     r.font.size = Pt(fit_size(text))
-    r.font.color.rgb = RGBColor(0x11, 0x11, 0x11)
-    r.font.name = "Calibri"
+    r.font.color.rgb = RGBColor(0xF3, 0xE7, 0xEA)  # warm ivory
+    r.font.name = SERIF
 
-    # 4. small pass reminder
-    foot = cell.add_paragraph()
-    tight(foot, before=0, after=0)
+    # 4. delicate italic pass reminder
+    foot = para(cell, before=0, after=0)
     r = foot.add_run(FOOTER_LINE)
     r.italic = True
-    r.font.size = Pt(7.5)
-    r.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-    r.font.name = "Calibri"
+    set_char_spacing(r, 20)
+    r.font.size = Pt(7)
+    r.font.color.rgb = RGBColor.from_string(soft_hex)
+    r.font.name = SERIF
 
 
 def add_sheet_spacer(document):
@@ -180,8 +235,7 @@ def add_sheet_spacer(document):
     pf.space_after = Pt(0)
     pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
     pf.line_spacing = Pt(1)
-    r = p.add_run()
-    r.font.size = Pt(1)
+    p.add_run().font.size = Pt(1)
     return p
 
 
@@ -215,7 +269,7 @@ def main():
     section.header_distance = section.footer_distance = Mm(6)
 
     style = doc.styles["Normal"]
-    style.font.name = "Calibri"
+    style.font.name = SERIF
     style.font.size = Pt(11)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
@@ -229,11 +283,6 @@ def main():
     for pi, page_cards in enumerate(pages):
         build_page(doc, page_cards)
         if pi < len(pages) - 1:
-            # A 1pt spacer separates consecutive tables (Word would otherwise
-            # merge them). No explicit page break: the 264mm grid plus 88mm of
-            # the next row cannot fit in 277mm of usable height, so the next
-            # table flows onto a fresh sheet on its own. An explicit break here
-            # would emit an extra blank page.
             add_sheet_spacer(doc)
 
     doc.save(OUT)

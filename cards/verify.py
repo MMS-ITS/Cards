@@ -49,12 +49,21 @@ for ti, t in enumerate(tables, start=1):
             if borders is not None:
                 for edge in ("top", "left", "bottom", "right"):
                     el = borders.find(qn(f"w:{edge}"))
-                    check(el is not None and el.get(qn("w:sz")) == "24",
-                          f"table {ti}: {edge} border not 3pt")
+                    check(el is not None and el.get(qn("w:val")) == "double",
+                          f"table {ti}: {edge} border not a double rule")
+            # dark card fill present?
+            shd = cell._tc.tcPr.find(qn("w:shd"))
+            check(shd is not None and shd.get(qn("w:fill")) == "17070E",
+                  f"table {ti}: card fill not dark ({shd.get(qn('w:fill')) if shd is not None else None})")
+            # 5 paragraphs now: label, number, divider, body, footer
             paras = [p.text for p in cell.paragraphs]
-            check(len(paras) == 4, f"table {ti}: cell has {len(paras)} paragraphs")
+            check(len(paras) == 5, f"table {ti}: cell has {len(paras)} paragraphs")
             check(paras[-1] == FOOTER_LINE, f"table {ti}: footer line missing ({paras[-1]!r})")
-            seen.append((paras[0], paras[1], paras[2]))
+            # confirm the label/body use the serif face
+            label_run = cell.paragraphs[0].runs[0] if cell.paragraphs[0].runs else None
+            check(label_run is not None and label_run.font.name == "Georgia",
+                  f"table {ti}: label not in serif font")
+            seen.append((paras[0], paras[1], paras[3]))
 
 check(cell_count == 60, f"expected 60 cards, got {cell_count}")
 
@@ -80,7 +89,7 @@ print(f"pages        : {len(tables)}  (10 expected)")
 print(f"cards        : {cell_count}  (60 expected)")
 print(f"tiers        : " + ", ".join(f"{k}={v}" for k, v in counts.items()))
 print(f"card size    : 63 x 88 mm -> grid 126 x 264 mm inside {usable_w:.0f} x {usable_h:.0f} mm usable")
-print(f"cut borders  : 3.0 pt solid black on all four sides")
+print(f"style        : dark card #17070E, double-rule accent frame, Georgia serif")
 print(f"footer line  : {FOOTER_LINE!r} on all 60 cards")
 print(f"longest card : #{longest[0]}, {len(longest[4])} chars")
 

@@ -75,19 +75,29 @@ RED = [
 ]
 
 # (label, accent_hex, soft_hex, cards)
-#   accent_hex -> tier label, big number, double-rule frame
-#   soft_hex   -> muted hairlines / keyline / footer, a dimmer tint of accent
-# Warm, sensual palette that glows against the dark card background:
-#   Flirty      -> blush rose
-#   Provocative -> amber / copper
-#   Very Daring -> deep crimson
+#   accent_hex -> tier label + big number (glows on the dark card, beside gold)
+#   soft_hex   -> retained for compatibility; the premium layout uses gold
+#                 for hairlines rather than this tint
+# Warm, jewel-toned palette chosen to sit harmoniously next to antique gold:
+#   Flirty      -> soft rose / petal pink
+#   Provocative -> warm coral / amber
+#   Very Daring -> rich ruby red
 TIERS = [
-    ("Flirty", "E7A6B4", "8A5563", GREEN),
-    ("Provocative", "E7A15C", "8A5F34", ORANGE),
-    ("Very Daring", "E0556A", "8A2E3C", RED),
+    ("Flirty", "EBA9B7", "8A5563", GREEN),
+    ("Provocative", "EC9A63", "8A5F34", ORANGE),
+    ("Very Daring", "E24B62", "8A2E3C", RED),
 ]
 
-FOOTER_LINE = "PASS = no explanation required"
+FOOTER_LINE = "PASS \u2014 no explanation required"
+
+# ---- cover / title page text -------------------------------------------
+COVER_TITLE = "Romance Night"
+COVER_SUBTITLE = "sixty invitations, drawn one at a time"
+COVER_RULES = {
+    "Flirty": "Warm, playful openers to set the mood.",
+    "Provocative": "Bolder invitations that raise the temperature.",
+    "Very Daring": "For when you are both ready to go further.",
+}
 
 
 def all_cards():
